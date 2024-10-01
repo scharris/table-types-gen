@@ -1,0 +1,4 @@
+jdbc.driverClassName=org.postgresql.Driver
+jdbc.url=jdbc:postgresql://localhost:5432/TODO-DATABASE
+jdbc.username=TODO-USER
+jdbc.password=TODO-PASSWORD
