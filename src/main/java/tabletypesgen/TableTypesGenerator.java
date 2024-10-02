@@ -133,13 +133,12 @@ public class TableTypesGenerator
     Path outputDir = javaBaseDir.resolve(javaPackage.replace('.', '/'));
     Files.createDirectories(outputDir);
 
-    for (var schemaRels: relMdsBySchema.entrySet())
+    for (var schemaRelMdsPair: relMdsBySchema.entrySet())
     {
-      String schema = schemaRels.getKey();
-      List<RelMetadata> relMds = nn(relMdsBySchema.get(schema), "relation metadatas for a given schema");
+      String schema = schemaRelMdsPair.getKey();
       String schemaClassName = schemaClassNamePrefix + (schema.isEmpty() ? "Public" : upperCamelCase(schema));
 
-      String schemaSource = makeSchemaSource(javaPackage, schemaClassName, relMds);
+      String schemaSource = makeSchemaSource(javaPackage, schemaClassName, schemaRelMdsPair.getValue());
 
       Files.writeString(outputDir.resolve(schemaClassName+".java"), schemaSource);
     }
@@ -267,62 +266,40 @@ public class TableTypesGenerator
   {
     String lcDbFieldType = f.databaseType().toLowerCase();
 
-    switch (lcDbFieldType)
+    return switch (lcDbFieldType)
     {
-      case "float":
-      case "real":
-      case "double":
-      case "double precision":
-        return withNullability(f.nullable(), "double");
-      case "number":
-      case "numeric":
-      case "decimal":
-      case "int":
-      case "integer":
-      case "bigint":
-      case "smallint":
-      case "int8":
-      case "int4":
-      case "int2":
-      case "serial":
-      case "smallserial":
-      case "bigserial":
-        return nonFloatingNumericPropertyType(f);
-      case "varchar":
-      case "varchar2":
-      case "bpchar": // blank-padded char (Postgres type for "char" fields)
-      case "text":
-      case "longvarchar":
-      case "char":
-      case "clob":
-      case "xml":
-      case "tsvector":
-        return withNullability(f.nullable(), "String");
-      case "uuid":
-        return withNullability(f.nullable(), "UUID");
-      case "timestamp with time zone":
-      case "timestamptz":
-        return withNullability(f.nullable(), "Instant");
-      case "timestamp":
-        return withNullability(f.nullable(), "LocalDateTime");
-      case "date":
-        return withNullability(f.nullable(), "LocalDate");
-      case "time":
-        return withNullability(f.nullable(), "LocalTime");
-      case "bit":
-      case "boolean":
-      case "bool":
-        return withNullability(f.nullable(), "boolean");
-      case "bytea":
-        return withNullability(f.nullable(), "byte[]");
-      case "json":
-      case "jsonb":
-        return withNullability(f.nullable(), "JsonNode");
-      default:
-        if ( lcDbFieldType.startsWith("timestamp") )
-          return withNullability(f.nullable(), "String");
-        else throw new RuntimeException("Unsupported type for field " + f.name() + " of type " + f.databaseType());
-    }
+      case "float", "real", "double", "double precision" ->
+        withNullability(f.nullable(), "double");
+      case "number", "numeric", "decimal",
+           "int", "integer", "bigint", "smallint", "int8", "int4", "int2",
+           "serial", "smallserial", "bigserial" ->
+        nonFloatingNumericPropertyType(f);
+      case "varchar", "varchar2", "text", "longvarchar", "char", "bpchar",
+           "clob", "xml", "tsvector" ->
+        withNullability(f.nullable(), "String");
+      case "uuid" ->
+        withNullability(f.nullable(), "UUID");
+      case "timestamp with time zone", "timestamptz" ->
+        withNullability(f.nullable(), "Instant");
+      case "timestamp" ->
+        withNullability(f.nullable(), "LocalDateTime");
+      case "date" ->
+        withNullability(f.nullable(), "LocalDate");
+      case "time" ->
+        withNullability(f.nullable(), "LocalTime");
+      case "bit", "boolean", "bool" ->
+        withNullability(f.nullable(), "boolean");
+      case "bytea" ->
+        withNullability(f.nullable(), "byte[]");
+      case "json", "jsonb" ->
+        withNullability(f.nullable(), "JsonNode");
+      default -> {
+        if (lcDbFieldType.startsWith("timestamp"))
+          yield withNullability(f.nullable(), "String");
+        else
+          throw new RuntimeException("Unsupported type for field " + f.name() + " of type " + f.databaseType());
+      }
+    };
   }
 
   private String nonFloatingNumericPropertyType(Field f)
@@ -356,13 +333,6 @@ public class TableTypesGenerator
       case "byte" -> "Byte";
       default -> typeName;
     };
-  }
-
-  private static <T> T nn(@Nullable T t, String what)
-  {
-    if (t == null)
-      throw new RuntimeException(what + " is required.");
-    return t;
   }
 
   private String schemaOrEmpty(RelMetadata rel)
