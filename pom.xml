@@ -17,6 +17,7 @@
     <enforcer-plugin-version>3.4.1</enforcer-plugin-version>
     <maven.plugin.validation>VERBOSE</maven.plugin.validation>
     <help-plugin-version>3.4.0</help-plugin-version>
+    <jshell-plugin-version>1.4</jshell-plugin-version>
     <pg.jdbc.version>42.7.4</pg.jdbc.version>
     <jackson.version>2.18.0</jackson.version>
     <!-- Properties intended to be customized via -D args with project specific settings. -->
@@ -131,6 +132,12 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-help-plugin</artifactId>
         <version>${help-plugin-version}</version>
+      </plugin>
+      <!-- Maven jshell plugin: mvn compile jshell:run     -->
+      <plugin>
+        <groupId>com.github.johnpoth</groupId>
+        <artifactId>jshell-maven-plugin</artifactId>
+        <version>${jshell-plugin-version}</version>
       </plugin>
     </plugins>
   </build>
