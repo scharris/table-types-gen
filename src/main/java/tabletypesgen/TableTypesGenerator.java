@@ -313,11 +313,12 @@ public class TableTypesGenerator
 
   private String nonFloatingNumericPropertyType(Field f)
   {
-    if (f.fractionalDigits() == null || f.fractionalDigits() > 0)
+    if (f.fractionalDigits() instanceof Integer d && d > 0)
       return withNullability(f.nullable(), "BigDecimal");
     else // no fractional part
     {
-      var primTypeName = f.precision() == null || f.precision() > 9 ? "long" : "int";
+      Integer p = f.precision();
+      var primTypeName = p == null || p > 9 ? "long" : "int";
       return withNullability(f.nullable(), primTypeName);
     }
   }
