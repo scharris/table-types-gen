@@ -1,18 +1,27 @@
 package tabletypesgen;
 
-import java.io.*;
-import java.nio.file.*;
-import java.util.*;
-import java.util.stream.IntStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
+import java.util.stream.IntStream;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.fasterxml.jackson.core.type.TypeReference;
-import static tabletypesgen.DatabaseMetadata.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import tabletypesgen.DatabaseMetadata.Field;
+import tabletypesgen.DatabaseMetadata.RelMetadata;
+import static tabletypesgen.DatabaseMetadata.RelType.table;
 import static tabletypesgen.util.Args.pluckNonEmptyStringOption;
 import static tabletypesgen.util.Args.pluckStringOption;
-import static tabletypesgen.DatabaseMetadata.RelType.table;
 import static tabletypesgen.util.StringFuns.capitalize;
 import static tabletypesgen.util.StringFuns.indentLines;
 import static tabletypesgen.util.StringFuns.lowerCamelCase;
