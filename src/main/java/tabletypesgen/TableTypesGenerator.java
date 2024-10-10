@@ -170,6 +170,7 @@ public class TableTypesGenerator
       import org.checkerframework.checker.nullness.qual.Nullable;
       import com.fasterxml.jackson.databind.JsonNode;
       import com.fasterxml.jackson.databind.node.*;
+      import java.io.InputStream;
       
       """
     );
@@ -302,6 +303,8 @@ public class TableTypesGenerator
         withNullability(f.nullable(), "byte[]");
       case "json", "jsonb" ->
         withNullability(f.nullable(), "JsonNode");
+      case "oid" ->
+        withNullability(f.nullable(), "InputStream");
       default -> {
         if (lcDbFieldType.startsWith("timestamp"))
           yield withNullability(f.nullable(), "String");
