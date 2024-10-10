@@ -22,8 +22,8 @@
     <pg.jdbc.version>42.7.4</pg.jdbc.version>
     <jackson.version>2.18.0</jackson.version>
     <!-- Properties intended to be customized via -D args with project specific settings. -->
-    <db.props>jdbc.localdev.props</db.props>
-    <dbmd.file>dbmd.json</dbmd.file>
+    <db.props>${project.basedir}/jdbc.props</db.props>
+    <dbmd.file>${project.basedir}/dbmd.json</dbmd.file>
     <tabletypes.customization.file/>
     <propname.style>DB</propname.style>
     <paramname.style>DB</paramname.style>
@@ -155,7 +155,7 @@
                     <mainClass>tabletypesgen.Queryer</mainClass>
                     <arguments>
                       <argument>--query-file</argument>
-                      <argument>dbmd.sql</argument>
+                      <argument>${project.basedir}/dbmd.sql</argument>
                       <argument>--output-file</argument>
                       <argument>${dbmd.file}</argument>
                       <!-- positional args -->
