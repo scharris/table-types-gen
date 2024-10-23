@@ -61,10 +61,12 @@ public class TableTypesGenerator
         java-package: Java package name for the produced source files.
         schema-classname-prefix: Prefix for schema class names (avoids potential clashes with Java keywords).
         [options]:
-          --customization-file: File containing a json object with optional properties:
-              propertyType?: Nullable<string>
-              includeInType?: Nullable<boolean>
-              includeInInsertSql?: Nullable<boolean>
+          --customization-file: File containing a json object with entries of the form:
+              "<schema>.<table>.<field>": {
+                  propertyType?: Nullable<string>
+                  includeInType?: Nullable<boolean>
+                  includeInInsertSql?: Nullable<boolean>
+              }
           --propname-style: Style for generated record properties. Valid values are DB, CAMELCASE.
           --paramname-style: Style for SQL parameters in generated insert SQL which is associated with each record type via a static member.
             Valid values are: DB, CAMELCASE, QMARK, DOLLAR_NUM.
@@ -163,7 +165,7 @@ public class TableTypesGenerator
     StringBuilder sb = new StringBuilder();
     sb.append("package ").append(javaPackage).append(";\n");
     sb.append("""
-      
+
       import java.util.*;
       import java.math.*;
       import java.time.*;
@@ -171,7 +173,7 @@ public class TableTypesGenerator
       import com.fasterxml.jackson.databind.JsonNode;
       import com.fasterxml.jackson.databind.node.*;
       import java.io.InputStream;
-      
+
       """
     );
     sb.append("public class ").append(schemaClassName).append(" {\n\n");
