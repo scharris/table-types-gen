@@ -377,10 +377,7 @@ public class TableTypesGenerator
   private String enumDef(Enum e)
   {
     StringBuilder sb = new StringBuilder();
-
-    @Nullable String schema = e.schema();
     String name = e.name();
-    String fqEnum = schema != null ? schema + "." + name : name;
 
     sb.append("/** Enum ").append(name).append(" */\n");
     sb.append("public enum ").append(enumName(name)).append("\n");
