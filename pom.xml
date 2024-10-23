@@ -24,7 +24,7 @@
     <!-- Properties intended to be customized via -D args with project specific settings. -->
     <db.props>${project.basedir}/jdbc.props</db.props>
     <dbmd.file>${project.basedir}/dbmd.json</dbmd.file>
-    <tabletypes.customization.file/>
+    <field-customizations.file>${project.basedir}/field-customizations.json</field-customizations.file>
     <propname.style>DB</propname.style>
     <paramname.style>DB</paramname.style>
     <tablename.style>DB_INITCAP</tablename.style>
@@ -178,7 +178,7 @@
                     <mainClass>tabletypesgen.TableTypesGenerator</mainClass>
                     <arguments>
                       <argument>--customization-file</argument>
-                      <argument>${tabletypes.customization.file}</argument>
+                      <argument>${field-customizations.file}</argument>
                       <argument>--propname-style</argument>
                       <argument>${propname.style}</argument>
                       <argument>--paramname-style</argument>

@@ -1,0 +1,7 @@
+{
+  "myschema.mytable.myfield": {
+    "propertyType": "String",
+    "includeInType": true,
+    "includeInInsertSql": true
+  }
+}
