@@ -60,7 +60,7 @@ public final class StringFuns
 
       for ( String word: name.split(sep) )
       {
-         if ( word.length() > 0 )
+         if (!word.isEmpty())
             sb.append(Character.toLowerCase(word.charAt(0)));
       }
 
@@ -86,7 +86,7 @@ public final class StringFuns
       StringBuilder res = new StringBuilder();
       for (String word : name.split("[_ -]"))
       {
-         if ( res.length() == 0 )
+         if (res.isEmpty())
             res.append(word.toLowerCase());
          else
          {
@@ -172,6 +172,11 @@ public final class StringFuns
       return ( s2.length() >= s1.length() ) ?
          s.replace(s2, v2).replace(s1, v1)
          : s.replace(s1, v1).replace(s2, v2);
+   }
+
+   public static String or(@Nullable String s, String def)
+   {
+      return s != null ? s : def;
    }
 
    private StringFuns() {}

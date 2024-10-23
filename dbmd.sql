@@ -104,6 +104,21 @@ foreignKeysQuery as (
       parent_tc.table_schema,
       child_tc.constraint_name
   ) fk
+),
+enumsQuery as (
+  select coalesce(json_agg(enum.json), '[]'::json) json
+  from (
+    select
+      json_build_object(
+        'schema', n.nspname,
+        'name', t.typname,
+        'labels', json_agg(e.enumlabel order by e.ctid)
+      ) json
+    from pg_type t
+    join pg_enum e on t.oid = e.enumtypid
+    join pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    group by n.nspname, t.typname
+  ) enum
 )
 -- main query
 select jsonb_pretty(jsonb_build_object(
@@ -111,5 +126,6 @@ select jsonb_pretty(jsonb_build_object(
   'dbmsVersion', split_part(version(), ' ', 2),
   'caseSensitivity', 'INSENSITIVE_STORED_LOWER',
   'relationMetadatas', (select json from relationMetadatasQuery),
-  'foreignKeys', (select json from foreignKeysQuery)
+  'foreignKeys', (select json from foreignKeysQuery),
+  'enums', (select json from enumsQuery)
 )) json

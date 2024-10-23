@@ -12,7 +12,8 @@ public record DatabaseMetadata
   @Nullable Integer minorVersion,
   CaseSensitivity caseSensitivity,
   List<RelMetadata> relationMetadatas,
-  List<ForeignKey> foreignKeys
+  List<ForeignKey> foreignKeys,
+  List<Enum> enums
 )
 {
   enum CaseSensitivity {
@@ -69,5 +70,12 @@ public record DatabaseMetadata
     RelId foreignKeyRelationId,
     RelId primaryKeyRelationId,
     List<ForeignKeyComponent> foreignKeyComponents
+  ) {}
+
+  record Enum
+  (
+    @Nullable String schema,
+    String name,
+    List<String> labels
   ) {}
 }

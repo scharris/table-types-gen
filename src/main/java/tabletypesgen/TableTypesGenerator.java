@@ -6,11 +6,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import static java.util.Collections.emptyList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
-import java.util.stream.IntStream;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -19,12 +20,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import tabletypesgen.DatabaseMetadata.Field;
 import tabletypesgen.DatabaseMetadata.RelMetadata;
+import tabletypesgen.DatabaseMetadata.Enum;
 import static tabletypesgen.DatabaseMetadata.RelType.table;
 import static tabletypesgen.util.Args.pluckNonEmptyStringOption;
 import static tabletypesgen.util.Args.pluckStringOption;
 import static tabletypesgen.util.StringFuns.capitalize;
 import static tabletypesgen.util.StringFuns.indentLines;
 import static tabletypesgen.util.StringFuns.lowerCamelCase;
+import static tabletypesgen.util.StringFuns.or;
 import static tabletypesgen.util.StringFuns.upperCamelCase;
 
 public class TableTypesGenerator
@@ -38,7 +41,7 @@ public class TableTypesGenerator
 
   TableTypesGenerator
     (
-      Map<String, FieldCustomization> fieldCustomizations,
+      Map<String,FieldCustomization> fieldCustomizations,
       PropertyNameStyle propNameStyle,
       ParameterNameStyle paramNameStyle,
       TableNameStyle tableNameStyle,
@@ -141,6 +144,9 @@ public class TableTypesGenerator
       dbmd.relationMetadatas().stream().filter(r -> r.relationType() == table)
       .collect(groupingBy(this::schemaOrEmpty));
 
+    Map<String,List<Enum>> enumsBySchema =
+      dbmd.enums().stream().collect(groupingBy(e -> or(e.schema(),"")));
+
     Path outputDir = javaBaseDir.resolve(javaPackage.replace('.', '/'));
     Files.createDirectories(outputDir);
 
@@ -149,7 +155,9 @@ public class TableTypesGenerator
       String schema = schemaRelMdsPair.getKey();
       String schemaClassName = schemaClassNamePrefix + (schema.isEmpty() ? "Public" : upperCamelCase(schema));
 
-      String schemaSource = makeSchemaSource(javaPackage, schemaClassName, schemaRelMdsPair.getValue());
+      List<Enum> enums = enumsBySchema.getOrDefault(schema, emptyList());
+
+      String schemaSource = makeSchemaSource(javaPackage, schemaClassName, schemaRelMdsPair.getValue(), enums);
 
       Files.writeString(outputDir.resolve(schemaClassName+".java"), schemaSource);
     }
@@ -159,7 +167,8 @@ public class TableTypesGenerator
     (
       String javaPackage,
       String schemaClassName,
-      List<RelMetadata> relMds
+      List<RelMetadata> relMds,
+      List<Enum> enums
     )
   {
     StringBuilder sb = new StringBuilder();
@@ -181,6 +190,11 @@ public class TableTypesGenerator
     {
       String recordDef = tableRecordDef(relMd);
       sb.append(indentLines(recordDef, 2)).append("\n\n");
+    }
+    for (var e: enums)
+    {
+      String edef = enumDef(e);
+      sb.append(indentLines(edef, 2)).append("\n\n");
     }
     sb.append("\n}\n");
 
@@ -236,6 +250,16 @@ public class TableTypesGenerator
       case DB_INITCAP -> capitalize(tableName);
       case CAMELCASE -> upperCamelCase(tableName);
       case DB -> tableName;
+    };
+  }
+
+  private String enumName(String name)
+  {
+    return switch (tableNameStyle)
+    {
+      case DB_INITCAP -> capitalize(name);
+      case CAMELCASE -> upperCamelCase(name);
+      case DB -> name;
     };
   }
 
@@ -348,6 +372,23 @@ public class TableTypesGenerator
       case "byte" -> "Byte";
       default -> typeName;
     };
+  }
+
+  private String enumDef(Enum e)
+  {
+    StringBuilder sb = new StringBuilder();
+
+    @Nullable String schema = e.schema();
+    String name = e.name();
+    String fqEnum = schema != null ? schema + "." + name : name;
+
+    sb.append("/** Enum ").append(name).append(" */\n");
+    sb.append("public enum ").append(enumName(name)).append("\n");
+
+    sb.append("{\n");
+    sb.append(e.labels().stream().map(l -> "  " + l).collect(joining(",\n")));
+    sb.append("\n}\n");
+    return sb.toString();
   }
 
   private String schemaOrEmpty(RelMetadata rel)
