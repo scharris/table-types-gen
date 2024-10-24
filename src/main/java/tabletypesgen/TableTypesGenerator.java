@@ -24,17 +24,14 @@ import tabletypesgen.DatabaseMetadata.Enum;
 import static tabletypesgen.DatabaseMetadata.RelType.table;
 import static tabletypesgen.util.Args.pluckNonEmptyStringOption;
 import static tabletypesgen.util.Args.pluckStringOption;
-import static tabletypesgen.util.StringFuns.capitalize;
-import static tabletypesgen.util.StringFuns.indentLines;
-import static tabletypesgen.util.StringFuns.lowerCamelCase;
-import static tabletypesgen.util.StringFuns.or;
-import static tabletypesgen.util.StringFuns.upperCamelCase;
+import static tabletypesgen.util.StringFuns.*;
 
 public class TableTypesGenerator
 {
   private final Map<String,FieldCustomization> fieldCustomizations;
   private final PropertyNameStyle propNameStyle;
   private final ParameterNameStyle paramNameStyle;
+  private final SchemaNameStyle schemaNameStyle;
   private final TableNameStyle tableNameStyle;
   private final UserDefinedTypeNameStyle userDefinedTypeNameStyle;
   private final String schemaClassNamePrefix;
@@ -45,6 +42,7 @@ public class TableTypesGenerator
       Map<String,FieldCustomization> fieldCustomizations,
       PropertyNameStyle propNameStyle,
       ParameterNameStyle paramNameStyle,
+      SchemaNameStyle schemaNameStyle,
       TableNameStyle tableNameStyle,
       UserDefinedTypeNameStyle userDefinedTypeNameStyle,
       String schemaClassNamePrefix,
@@ -54,6 +52,7 @@ public class TableTypesGenerator
     this.fieldCustomizations = fieldCustomizations;
     this.propNameStyle = propNameStyle;
     this.paramNameStyle = paramNameStyle;
+    this.schemaNameStyle = schemaNameStyle;
     this.tableNameStyle = tableNameStyle;
     this.userDefinedTypeNameStyle = userDefinedTypeNameStyle;
     this.schemaClassNamePrefix = schemaClassNamePrefix;
@@ -76,7 +75,12 @@ public class TableTypesGenerator
           --propname-style: Style for generated record properties. Valid values are DB, CAMELCASE.
           --paramname-style: Style for SQL parameters in generated insert SQL which is associated with each record type via a static member.
             Valid values are: DB, CAMELCASE, QMARK, DOLLAR_NUM.
-          --tablename-style: Style for table record names. Valid values are DB, DB_INITCAP, CAMELCASE.
+          --schemaname-style: Style for the names of Java classes representing database schemas.
+            Valid values are DB, DB_INITCAP, DB_INITCAPS, CAMELCASE.
+          --tablename-style: Style for Java record names representing database tables.
+            Valid values are DB, DB_INITCAP, DB_INITCAPS, CAMELCASE.
+          --udtname-style: Style for Java type names representing database user-defined types.
+            Valid values are DB, DB_INITCAP, DB_INITCAPS, CAMELCASE.
       """;
 
   public static void main(String[] args)
@@ -90,11 +94,12 @@ public class TableTypesGenerator
     List<String> remArgs = new ArrayList<>(Arrays.asList(args));
 
     @Nullable Path fieldCustsFile = pluckNonEmptyStringOption(remArgs, "--customization-file").map(Paths::get).orElse(null);
-    PropertyNameStyle propStyle = PropertyNameStyle.valueOf(pluckStringOption(remArgs, "--propname-style").orElse("DB"));
-    ParameterNameStyle paramStyle = ParameterNameStyle.valueOf(pluckStringOption(remArgs, "--paramname-style").orElse("DB"));
-    TableNameStyle tblNameStyle = TableNameStyle.valueOf(pluckStringOption(remArgs, "--tablename-style").orElse("DB_INITCAP"));
-    UserDefinedTypeNameStyle udtNameStyle = UserDefinedTypeNameStyle.valueOf(pluckStringOption(remArgs, "--udt-style").orElse("DB_INITCAP"));
-    String schemaClassPrefix = pluckStringOption(remArgs, "--schema-classname-prefix").orElse("");
+    var propStyle = PropertyNameStyle.valueOf(pluckStringOption(remArgs, "--propname-style").orElse("DB"));
+    var parStyle = ParameterNameStyle.valueOf(pluckStringOption(remArgs, "--paramname-style").orElse("DB"));
+    var schemaStyle = SchemaNameStyle.valueOf(pluckStringOption(remArgs, "--schemaname-style").orElse("DB_INITCAPS"));
+    var tableStyle = TableNameStyle.valueOf(pluckStringOption(remArgs, "--tablename-style").orElse("DB_INITCAPS"));
+    var udtStyle = UserDefinedTypeNameStyle.valueOf(pluckStringOption(remArgs, "--udtname-style").orElse("DB_INITCAPS"));
+    String schemaPrefix = pluckStringOption(remArgs, "--schema-classname-prefix").orElse("");
 
     if ( remArgs.size() != 3 )
     {
@@ -117,20 +122,11 @@ public class TableTypesGenerator
     {
       ObjectMapper objMapper = new ObjectMapper();
 
-      Map<String,FieldCustomization> fieldCusts = fieldCustsFile != null
+      Map<String,FieldCustomization> fcusts = fieldCustsFile != null
         ? objMapper.readValue(fieldCustsFile.toFile(), new TypeReference<>(){})
         : Map.of();
 
-      var generator =
-        new TableTypesGenerator(
-          fieldCusts,
-          propStyle,
-          paramStyle,
-          tblNameStyle,
-          udtNameStyle,
-          schemaClassPrefix,
-          objMapper
-        );
+      var generator = new TableTypesGenerator(fcusts, propStyle, parStyle, schemaStyle, tableStyle, udtStyle, schemaPrefix, objMapper);
 
       generator.run(dbmdFile, javaBaseDir, javaPackage);
 
@@ -174,11 +170,6 @@ public class TableTypesGenerator
 
       Files.writeString(outputDir.resolve(schemaClassName+".java"), schemaSource);
     }
-  }
-
-  private String schemaClassName(String schema)
-  {
-    return schemaClassNamePrefix + (schema.isEmpty() ? "Public" : upperCamelCase(schema));
   }
 
   private String makeSchemaSource
@@ -255,16 +246,32 @@ public class TableTypesGenerator
     sb.append("    insert into ").append(fqTable).append("(").append(insertFieldNames).append(")\n");
     sb.append("    values(").append(insertParams).append(")\n");
     sb.append("    \"\"\";\n");
+    sb.append("  public static final String qName = \"").append(fqTable).append("\";\n");
 
     sb.append("}\n");
 
     return sb.toString();
   }
 
+
+  private String schemaClassName(String schema)
+  {
+    var name = schema.isEmpty() ? "public" : schema;
+    return schemaClassNamePrefix +
+      switch (schemaNameStyle)
+      {
+        case DB_INITCAPS -> capitalizeParts(name);
+        case DB_INITCAP -> capitalize(name);
+        case CAMELCASE -> upperCamelCase(name);
+        case DB -> name;
+      };
+  }
+
   private String tableRecordName(String tableName)
   {
     return switch (tableNameStyle)
     {
+      case DB_INITCAPS -> capitalizeParts(tableName);
       case DB_INITCAP -> capitalize(tableName);
       case CAMELCASE -> upperCamelCase(tableName);
       case DB -> tableName;
@@ -278,6 +285,7 @@ public class TableTypesGenerator
     String typeName =
       switch (userDefinedTypeNameStyle)
       {
+        case DB_INITCAPS -> capitalizeParts(name);
         case DB_INITCAP -> capitalize(name);
         case CAMELCASE -> upperCamelCase(name);
         case DB -> name;
@@ -424,8 +432,9 @@ public class TableTypesGenerator
 
   enum PropertyNameStyle { DB, CAMELCASE }
   enum ParameterNameStyle { DB, CAMELCASE, QMARK, DOLLAR_NUM}
-  enum TableNameStyle { DB, DB_INITCAP, CAMELCASE }
-  enum UserDefinedTypeNameStyle { DB, DB_INITCAP, CAMELCASE }
+  enum TableNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
+  enum UserDefinedTypeNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
+  enum SchemaNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
 
   record FieldCustomization
   (

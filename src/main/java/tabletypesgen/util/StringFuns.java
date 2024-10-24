@@ -1,11 +1,13 @@
 package tabletypesgen.util;
 
+import java.util.Arrays;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import static java.util.Locale.ENGLISH;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-import static java.util.Locale.ENGLISH;
 
 
 public final class StringFuns
@@ -99,8 +101,16 @@ public final class StringFuns
 
    public static String capitalize(String name)
    {
-      if ( name.isEmpty() ) return name;
-      else return name.substring(0, 1).toUpperCase(ENGLISH) + name.substring(1);
+      if (name.isEmpty())
+        return name;
+      return name.substring(0, 1).toUpperCase(ENGLISH) + name.substring(1);
+   }
+
+   public static String capitalizeParts(String name)
+   {
+      if (name.isEmpty())
+        return name;
+      return Arrays.stream(name.split("[_ -]")).map(StringFuns::capitalize).collect(Collectors.joining("_"));
    }
 
    public static String indentLines
