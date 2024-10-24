@@ -166,7 +166,7 @@ public class TableTypesGenerator
 
       List<Enum> enums = enumsBySchema.getOrDefault(schema, emptyList());
 
-      String schemaSource = makeSchemaSource(javaPackage, schemaClassName, schemaRelMdsPair.getValue(), enums);
+      String schemaSource = makeSchemaSource(javaPackage, schema, schemaClassName, schemaRelMdsPair.getValue(), enums);
 
       Files.writeString(outputDir.resolve(schemaClassName+".java"), schemaSource);
     }
@@ -175,6 +175,7 @@ public class TableTypesGenerator
   private String makeSchemaSource
     (
       String javaPackage,
+      String schema,
       String schemaClassName,
       List<RelMetadata> relMds,
       List<Enum> enums
@@ -195,6 +196,7 @@ public class TableTypesGenerator
       """
     );
     sb.append("public class ").append(schemaClassName).append(" {\n\n");
+    sb.append("  public static final String schemaName = \"").append(schema).append("\";\n\n");
     for (var relMd: relMds)
     {
       String recordDef = tableRecordDef(relMd);
