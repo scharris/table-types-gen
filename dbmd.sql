@@ -11,7 +11,9 @@ relationMetadatasQuery as (
         select
           coalesce(json_agg(json_build_object(
             'name', col.column_name,
-            'databaseType', col.udt_name,
+            'type', col.udt_name,
+            'typeSchema', col.udt_schema,
+            'typeUserDefined', col.data_type = 'USER-DEFINED',
             'nullable', case col.is_nullable when 'NO' then false when 'YES' then true end,
             'primaryKeyPartNumber', (
               select kcu.ordinal_position

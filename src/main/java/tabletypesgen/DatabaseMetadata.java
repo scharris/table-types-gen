@@ -38,7 +38,9 @@ public record DatabaseMetadata
   record Field
   (
     String name,
-    String databaseType,
+    String type,
+    String typeSchema,
+    boolean typeUserDefined,
     int jdbcTypeCode,
     @Nullable Boolean nullable,
     @Nullable Integer primaryKeyPartNumber,

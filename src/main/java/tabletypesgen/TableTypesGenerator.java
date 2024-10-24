@@ -36,6 +36,7 @@ public class TableTypesGenerator
   private final PropertyNameStyle propNameStyle;
   private final ParameterNameStyle paramNameStyle;
   private final TableNameStyle tableNameStyle;
+  private final UserDefinedTypeNameStyle userDefinedTypeNameStyle;
   private final String schemaClassNamePrefix;
   private final ObjectMapper objMapper;
 
@@ -45,6 +46,7 @@ public class TableTypesGenerator
       PropertyNameStyle propNameStyle,
       ParameterNameStyle paramNameStyle,
       TableNameStyle tableNameStyle,
+      UserDefinedTypeNameStyle userDefinedTypeNameStyle,
       String schemaClassNamePrefix,
       ObjectMapper objMapper
     )
@@ -53,6 +55,7 @@ public class TableTypesGenerator
     this.propNameStyle = propNameStyle;
     this.paramNameStyle = paramNameStyle;
     this.tableNameStyle = tableNameStyle;
+    this.userDefinedTypeNameStyle = userDefinedTypeNameStyle;
     this.schemaClassNamePrefix = schemaClassNamePrefix;
     this.objMapper = objMapper;
   }
@@ -90,6 +93,7 @@ public class TableTypesGenerator
     PropertyNameStyle propStyle = PropertyNameStyle.valueOf(pluckStringOption(remArgs, "--propname-style").orElse("DB"));
     ParameterNameStyle paramStyle = ParameterNameStyle.valueOf(pluckStringOption(remArgs, "--paramname-style").orElse("DB"));
     TableNameStyle tblNameStyle = TableNameStyle.valueOf(pluckStringOption(remArgs, "--tablename-style").orElse("DB_INITCAP"));
+    UserDefinedTypeNameStyle udtNameStyle = UserDefinedTypeNameStyle.valueOf(pluckStringOption(remArgs, "--udt-style").orElse("DB_INITCAP"));
     String schemaClassPrefix = pluckStringOption(remArgs, "--schema-classname-prefix").orElse("");
 
     if ( remArgs.size() != 3 )
@@ -117,7 +121,16 @@ public class TableTypesGenerator
         ? objMapper.readValue(fieldCustsFile.toFile(), new TypeReference<>(){})
         : Map.of();
 
-      var generator = new TableTypesGenerator(fieldCusts, propStyle, paramStyle, tblNameStyle, schemaClassPrefix, objMapper);
+      var generator =
+        new TableTypesGenerator(
+          fieldCusts,
+          propStyle,
+          paramStyle,
+          tblNameStyle,
+          udtNameStyle,
+          schemaClassPrefix,
+          objMapper
+        );
 
       generator.run(dbmdFile, javaBaseDir, javaPackage);
 
@@ -153,7 +166,7 @@ public class TableTypesGenerator
     for (var schemaRelMdsPair: relMdsBySchema.entrySet())
     {
       String schema = schemaRelMdsPair.getKey();
-      String schemaClassName = schemaClassNamePrefix + (schema.isEmpty() ? "Public" : upperCamelCase(schema));
+      String schemaClassName = schemaClassName(schema);
 
       List<Enum> enums = enumsBySchema.getOrDefault(schema, emptyList());
 
@@ -161,6 +174,11 @@ public class TableTypesGenerator
 
       Files.writeString(outputDir.resolve(schemaClassName+".java"), schemaSource);
     }
+  }
+
+  private String schemaClassName(String schema)
+  {
+    return schemaClassNamePrefix + (schema.isEmpty() ? "Public" : upperCamelCase(schema));
   }
 
   private String makeSchemaSource
@@ -253,21 +271,28 @@ public class TableTypesGenerator
     };
   }
 
-  private String enumName(String name)
+  private String userDefinedTypeName(@Nullable String schema, String name)
   {
-    return switch (tableNameStyle)
-    {
-      case DB_INITCAP -> capitalize(name);
-      case CAMELCASE -> upperCamelCase(name);
-      case DB -> name;
-    };
+    @Nullable String schemaClassName = schema != null ? schemaClassName(schema) : null;
+
+    String typeName =
+      switch (userDefinedTypeNameStyle)
+      {
+        case DB_INITCAP -> capitalize(name);
+        case CAMELCASE -> upperCamelCase(name);
+        case DB -> name;
+      };
+
+    return (schemaClassName != null) ? schemaClassName + "." + typeName : typeName;
   }
 
   private String propType(String fqTable, Field f)
   {
-    String fqField = fqTable + "." + f.name();
-    @Nullable FieldCustomization cust = fieldCustomizations.get(fqField);
-    return cust != null && cust.propertyType != null ? cust.propertyType : defaultJavaTypeForTableField(f);
+    @Nullable FieldCustomization cust = fieldCustomizations.get(fqTable + "." + f.name());
+    if (cust != null && cust.propertyType != null)
+      return cust.propertyType;
+
+    return defaultJavaTypeForTableField(f);
   }
 
   private String propName(Field f)
@@ -300,7 +325,10 @@ public class TableTypesGenerator
 
   private String defaultJavaTypeForTableField(Field f)
   {
-    String lcDbFieldType = f.databaseType().toLowerCase();
+    if (f.typeUserDefined())
+      return userDefinedTypeName(f.typeSchema(), f.type());
+
+    String lcDbFieldType = f.type().toLowerCase();
 
     return switch (lcDbFieldType)
     {
@@ -335,7 +363,7 @@ public class TableTypesGenerator
         if (lcDbFieldType.startsWith("timestamp"))
           yield withNullability(f.nullable(), "String");
         else
-          throw new RuntimeException("Unsupported type for field " + f.name() + " of type " + f.databaseType());
+          throw new RuntimeException("Unsupported type for field " + f.name() + " of type " + f.type());
       }
     };
   }
@@ -380,7 +408,7 @@ public class TableTypesGenerator
     String name = e.name();
 
     sb.append("/** Enum ").append(name).append(" */\n");
-    sb.append("public enum ").append(enumName(name)).append("\n");
+    sb.append("public enum ").append(userDefinedTypeName(null, name)).append("\n");
 
     sb.append("{\n");
     sb.append(e.labels().stream().map(l -> "  " + l).collect(joining(",\n")));
@@ -397,6 +425,7 @@ public class TableTypesGenerator
   enum PropertyNameStyle { DB, CAMELCASE }
   enum ParameterNameStyle { DB, CAMELCASE, QMARK, DOLLAR_NUM}
   enum TableNameStyle { DB, DB_INITCAP, CAMELCASE }
+  enum UserDefinedTypeNameStyle { DB, DB_INITCAP, CAMELCASE }
 
   record FieldCustomization
   (
