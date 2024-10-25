@@ -14,6 +14,8 @@ relationMetadatasQuery as (
             'type', col.udt_name,
             'typeSchema', col.udt_schema,
             'typeUserDefined', col.data_type = 'USER-DEFINED',
+            'identityGeneration', col.identity_generation,
+            'isIdentity', col.is_identity = 'YES',
             'nullable', case col.is_nullable when 'NO' then false when 'YES' then true end,
             'primaryKeyPartNumber', (
               select kcu.ordinal_position

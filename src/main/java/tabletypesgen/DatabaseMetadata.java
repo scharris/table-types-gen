@@ -41,6 +41,8 @@ public record DatabaseMetadata
     String type,
     String typeSchema,
     boolean typeUserDefined,
+    boolean isIdentity,
+    @Nullable String identityGeneration,
     int jdbcTypeCode,
     @Nullable Boolean nullable,
     @Nullable Integer primaryKeyPartNumber,

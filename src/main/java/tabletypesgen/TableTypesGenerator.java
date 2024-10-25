@@ -226,7 +226,7 @@ public class TableTypesGenerator
     sb.append("(\n");
     sb.append(
       relMd.fields().stream()
-      .filter(f -> includeFieldInType(fqTable + "." + f.name()))
+      .filter(f -> includeFieldInType(f, fqTable + "." + f.name()))
       .map(f -> "  " + propType(fqTable, f) + " " + propName(f))
       .collect(joining(",\n"))
     );
@@ -235,18 +235,28 @@ public class TableTypesGenerator
     sb.append("{\n");
 
     List<Field> insertFields = relMd.fields().stream()
-      .filter(f-> includeFieldInInsertSql(fqTable + "." + f.name()))
+      .filter(f-> includeFieldInInsertSql(f, fqTable + "." + f.name()))
       .toList();
     String insertFieldNames = insertFields.stream().map(Field::name).collect(joining(","));
+
     String insertParams =
       IntStream.range(0, insertFields.size())
       .mapToObj(i -> paramName(insertFields.get(i), i))
       .collect(joining(","));
 
+    List<String> returningFieldNames =
+      relMd.fields().stream()
+      .filter(f-> "ALWAYS".equals(f.identityGeneration()))
+      .map(Field::name)
+      .toList();
+    String returningClause = returningFieldNames.isEmpty() ? "" :
+      ("    returning " + String.join(",", returningFieldNames) + "\n");
+
     sb.append("  public static final String insertSql =\n");
     sb.append("    \"\"\"\n");
     sb.append("    insert into ").append(fqTable).append("(").append(insertFieldNames).append(")\n");
     sb.append("    values(").append(insertParams).append(")\n");
+    sb.append(returningClause);
     sb.append("    \"\"\";\n");
     sb.append("  public static final String qName = \"").append(fqTable).append("\";\n");
 
@@ -321,16 +331,20 @@ public class TableTypesGenerator
     };
   }
 
-  private boolean includeFieldInType(String fqField)
+  private boolean includeFieldInType(Field f, String fqField)
   {
-    FieldCustomization fc = fieldCustomizations.get(fqField);
-    return fc != null && fc.includeInType != null ? fc.includeInType : true;
+    FieldCustomization fcust = fieldCustomizations.get(fqField);
+
+    return fcust != null && fcust.includeInType != null ? fcust.includeInType
+      : !"ALWAYS".equals(f.identityGeneration());
   }
 
-  private boolean includeFieldInInsertSql(String fqField)
+  private boolean includeFieldInInsertSql(Field f, String fqField)
   {
     @Nullable FieldCustomization fc = fieldCustomizations.get(fqField);
-    return fc != null && fc.includeInInsertSql != null ? fc.includeInInsertSql : true;
+
+    return fc != null && fc.includeInInsertSql != null ? fc.includeInInsertSql
+      : !"ALWAYS".equals(f.identityGeneration());
   }
 
   private String defaultJavaTypeForTableField(Field f)
