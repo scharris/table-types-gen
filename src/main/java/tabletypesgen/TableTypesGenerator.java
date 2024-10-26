@@ -358,10 +358,15 @@ public class TableTypesGenerator
     {
       case "float", "real", "double", "double precision" ->
         withNullability(f.nullable(), "double");
-      case "number", "numeric", "decimal",
-           "int", "integer", "bigint", "smallint", "int8", "int4", "int2",
+      case "number", "numeric", "decimal" ->
+        withNullability(f.nullable(), "BigDecimal");
+      case "int", "integer", "bigint", "smallint", "int8", "int4", "int2",
            "serial", "smallserial", "bigserial" ->
-        nonFloatingNumericPropertyType(f);
+      {
+        Integer p = f.precision();
+        var primTypeName = p == null || p > 9 ? "long" : "int";
+        yield withNullability(f.nullable(), primTypeName);
+      }
       case "varchar", "varchar2", "text", "longvarchar", "char", "bpchar",
            "clob", "xml", "tsvector" ->
         withNullability(f.nullable(), "String");
@@ -390,18 +395,6 @@ public class TableTypesGenerator
           throw new RuntimeException("Unsupported type for field " + f.name() + " of type " + f.type());
       }
     };
-  }
-
-  private String nonFloatingNumericPropertyType(Field f)
-  {
-    if (f.fractionalDigits() instanceof Integer d && d > 0)
-      return withNullability(f.nullable(), "BigDecimal");
-    else // no fractional part
-    {
-      Integer p = f.precision();
-      var primTypeName = p == null || p > 9 ? "long" : "int";
-      return withNullability(f.nullable(), primTypeName);
-    }
   }
 
   private String withNullability(@Nullable Boolean maybeNullable, String typeName)
