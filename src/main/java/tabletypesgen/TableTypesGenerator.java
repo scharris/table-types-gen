@@ -241,7 +241,7 @@ public class TableTypesGenerator
 
     String insertParams =
       IntStream.range(0, insertFields.size())
-      .mapToObj(i -> paramName(insertFields.get(i), i))
+      .mapToObj(i -> sqlParamRef(insertFields.get(i), i))
       .collect(joining(","));
 
     List<String> returningFieldNames =
@@ -320,15 +320,18 @@ public class TableTypesGenerator
     return propNameStyle == PropertyNameStyle.DB ? f.name() : lowerCamelCase(f.name());
   }
 
-  private String paramName(Field f, int fieldIx)
+  private String sqlParamRef(Field f, int fieldIx)
   {
-    return switch(paramNameStyle)
-    {
-      case DB -> ":" + f.name();
-      case CAMELCASE -> ":" + lowerCamelCase(f.name());
-      case QMARK -> "?";
-      case DOLLAR_NUM -> "$" + (fieldIx + 1);
-    };
+    var bareParam =
+      switch(paramNameStyle)
+      {
+        case DB -> ":" + f.name();
+        case CAMELCASE -> ":" + lowerCamelCase(f.name());
+        case QMARK -> "?";
+        case DOLLAR_NUM -> "$" + (fieldIx + 1);
+      };
+
+    return f.typeUserDefined() ? bareParam+"::"+f.typeSchema()+"."+f.type() : bareParam;
   }
 
   private boolean includeFieldInType(Field f, String fqField)
