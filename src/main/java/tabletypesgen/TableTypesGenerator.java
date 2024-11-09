@@ -431,9 +431,28 @@ public class TableTypesGenerator
     sb.append("public enum ").append(userDefinedTypeName(null, name)).append("\n");
 
     sb.append("{\n");
-    sb.append(e.labels().stream().map(l -> "  " + l).collect(joining(",\n")));
+    sb.append(e.labels().stream().map(l -> "  " + javaEnumLabelFromPg(l)).collect(joining(",\n")));
     sb.append("\n}\n");
     return sb.toString();
+  }
+
+  private static String javaEnumLabelFromPg(String pgEnumLabel)
+  {
+    return
+      pgEnumLabel
+      .replaceAll(",", "_comma_")
+      .replaceAll("/", "_slash_")
+      .replaceAll("\\.", "_dot_")
+      .replaceAll("-", "_hyphen_")
+      .replaceAll("\\(", "_lp_")
+      .replaceAll("\\)", "_rp_")
+      .replaceAll("\\[", "_lsb_")
+      .replaceAll("]", "_rsb_")
+      .replaceAll("\\{", "_lcb_")
+      .replaceAll("}", "_rcb_")
+      .replaceAll("<", "_lab_")
+      .replaceAll(">", "_rab_")
+      .replaceAll("\\s", "_");
   }
 
   private String schemaOrEmpty(RelMetadata rel)
