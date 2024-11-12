@@ -353,7 +353,7 @@ public class TableTypesGenerator
   private String defaultJavaTypeForTableField(Field f)
   {
     if (f.typeUserDefined())
-      return userDefinedTypeName(f.typeSchema(), f.type());
+      return withNullability(f.nullable(), userDefinedTypeName(f.typeSchema(), f.type()));
 
     String lcDbFieldType = f.type().toLowerCase();
 
@@ -403,7 +403,12 @@ public class TableTypesGenerator
   private String withNullability(@Nullable Boolean maybeNullable, String typeName)
   {
     var nullable = maybeNullable == null || maybeNullable;
-    return nullable ? "@Nullable " + toReferenceType(typeName) : typeName;
+    if (!nullable) return typeName;
+
+    int typeDotIx = typeName.indexOf('.');
+    if (typeDotIx != -1)
+      return typeName.substring(0, typeDotIx + 1) + "@Nullable " + typeName.substring(typeDotIx + 1);
+    else return "@Nullable " + toReferenceType(typeName);
   }
 
   private String toReferenceType(String typeName)
