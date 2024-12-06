@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toSet;
+import java.util.stream.Stream;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -35,7 +37,10 @@ public class TableTypesGenerator
   private final TableNameStyle tableNameStyle;
   private final UserDefinedTypeNameStyle userDefinedTypeNameStyle;
   private final String schemaClassNamePrefix;
+  private final String insertRecordNameSuffix;
   private final ObjectMapper objMapper;
+
+  private static final String DEFAULT_INSERT_RECORD_NAME_SUFFIX = "_Ins";
 
   TableTypesGenerator
     (
@@ -46,6 +51,7 @@ public class TableTypesGenerator
       TableNameStyle tableNameStyle,
       UserDefinedTypeNameStyle userDefinedTypeNameStyle,
       String schemaClassNamePrefix,
+      String insertRecordNameSuffix,
       ObjectMapper objMapper
     )
   {
@@ -56,6 +62,7 @@ public class TableTypesGenerator
     this.tableNameStyle = tableNameStyle;
     this.userDefinedTypeNameStyle = userDefinedTypeNameStyle;
     this.schemaClassNamePrefix = schemaClassNamePrefix;
+    this.insertRecordNameSuffix = insertRecordNameSuffix;
     this.objMapper = objMapper;
   }
 
@@ -81,6 +88,7 @@ public class TableTypesGenerator
             Valid values are DB, DB_INITCAP, DB_INITCAPS, CAMELCASE.
           --udtname-style: Style for Java type names representing database user-defined types.
             Valid values are DB, DB_INITCAP, DB_INITCAPS, CAMELCASE.
+          --ins-record-suffix: Suffix to be added to insert record types. Defaults to "_Ins".
       """;
 
   public static void main(String[] args)
@@ -99,6 +107,7 @@ public class TableTypesGenerator
     var schemaStyle = SchemaNameStyle.valueOf(pluckStringOption(remArgs, "--schemaname-style").orElse("DB_INITCAPS"));
     var tableStyle = TableNameStyle.valueOf(pluckStringOption(remArgs, "--tablename-style").orElse("DB_INITCAPS"));
     var udtStyle = UserDefinedTypeNameStyle.valueOf(pluckStringOption(remArgs, "--udtname-style").orElse("DB_INITCAPS"));
+    var insRcdNameSuffix = pluckStringOption(remArgs, "--ins-record-suffix").orElse(DEFAULT_INSERT_RECORD_NAME_SUFFIX);
     String schemaPrefix = pluckStringOption(remArgs, "--schema-classname-prefix").orElse("");
 
     if ( remArgs.size() != 3 )
@@ -126,7 +135,7 @@ public class TableTypesGenerator
         ? objMapper.readValue(fieldCustsFile.toFile(), new TypeReference<>(){})
         : Map.of();
 
-      var generator = new TableTypesGenerator(fcusts, propStyle, parStyle, schemaStyle, tableStyle, udtStyle, schemaPrefix, objMapper);
+      var generator = new TableTypesGenerator(fcusts, propStyle, parStyle, schemaStyle, tableStyle, udtStyle, schemaPrefix, insRcdNameSuffix, objMapper);
 
       generator.run(dbmdFile, javaBaseDir, javaPackage);
 
@@ -185,13 +194,13 @@ public class TableTypesGenerator
     sb.append("package ").append(javaPackage).append(";\n");
     sb.append("""
 
-      import java.util.*;
+      import java.io.InputStream;
       import java.math.*;
       import java.time.*;
+      import java.util.*;
       import org.checkerframework.checker.nullness.qual.Nullable;
       import com.fasterxml.jackson.databind.JsonNode;
       import com.fasterxml.jackson.databind.node.*;
-      import java.io.InputStream;
 
       """
     );
@@ -199,8 +208,16 @@ public class TableTypesGenerator
     sb.append("  public static final String schemaName = \"").append(schema).append("\";\n\n");
     for (var relMd: relMds)
     {
-      String recordDef = tableRecordDef(relMd);
-      sb.append(indentLines(recordDef, 2)).append("\n\n");
+      var insFields = getIncludedFieldsForRecordUse(relMd, RecordUse.FOR_INSERT).map(Field::name).collect(toSet());
+      var qryFields = getIncludedFieldsForRecordUse(relMd, RecordUse.FOR_QUERY).map(Field::name).collect(toSet());
+
+      if (insFields.equals(qryFields))
+        sb.append(indentLines(tableRecordDef(relMd, RecordUse.FOR_ANY), 2)).append("\n\n");
+      else
+      {
+        sb.append(indentLines(tableRecordDef(relMd, RecordUse.FOR_INSERT), 2)).append("\n\n");
+        sb.append(indentLines(tableRecordDef(relMd, RecordUse.FOR_QUERY), 2)).append("\n\n");
+      }
     }
     for (var e: enums)
     {
@@ -212,29 +229,42 @@ public class TableTypesGenerator
     return sb.toString();
   }
 
-  private String tableRecordDef(RelMetadata relMd)
+  private String tableRecordDef(RelMetadata relMd, RecordUse recordUse)
   {
     StringBuilder sb = new StringBuilder();
 
     @Nullable String schema = relMd.relationId().schema();
     String tableName = relMd.relationId().name();
     String fqTable = schema != null ? schema + "." + tableName : tableName;
+    String useDescr = recordUse.name().toLowerCase().replace('_', ' ') + " use";
 
-    sb.append("/** Table ").append(tableName).append(" */\n");
-    sb.append("public record ").append(tableRecordName(tableName)).append("\n");
+    sb.append("/** Table \"").append(tableName).append("\" ").append(useDescr).append(" */\n");
+    sb.append("public record ").append(tableRecordName(tableName, recordUse)).append("\n");
 
     sb.append("(\n");
-    sb.append(
-      relMd.fields().stream()
-      .filter(f -> includeFieldInType(f, fqTable + "." + f.name()))
+    sb.append(getIncludedFieldsForRecordUse(relMd, recordUse)
       .map(f -> "  " + propType(fqTable, f) + " " + propName(f))
       .collect(joining(",\n"))
     );
-    sb.append("\n)\n");
+    sb.append("\n)");
 
-    sb.append("{\n");
+    sb.append("\n{\n");
+    sb.append("  public static final String qName = \"").append(fqTable).append("\";\n\n");
 
-    List<Field> insertFields = relMd.fields().stream()
+    if (recordUse == RecordUse.FOR_INSERT || recordUse == RecordUse.FOR_ANY)
+      appendInsertSqlDef(fqTable, relMd.fields(), sb);
+    if (recordUse == RecordUse.FOR_QUERY || recordUse == RecordUse.FOR_ANY)
+      appendQuerySqlDef(fqTable, relMd.fields(), sb);
+
+    sb.append("}\n");
+
+
+    return sb.toString();
+  }
+
+  private void appendInsertSqlDef(String fqTable, List<Field> fields, StringBuilder sb)
+  {
+    List<Field> insertFields = fields.stream()
       .filter(f-> includeFieldInInsertSql(f, fqTable + "." + f.name()))
       .toList();
     String insertFieldNames = insertFields.stream().map(Field::name).collect(joining(","));
@@ -245,7 +275,7 @@ public class TableTypesGenerator
       .collect(joining(","));
 
     List<String> returningFieldNames =
-      relMd.fields().stream()
+      fields.stream()
       .filter(f-> "ALWAYS".equals(f.identityGeneration()))
       .map(Field::name)
       .toList();
@@ -258,13 +288,18 @@ public class TableTypesGenerator
     sb.append("    values(").append(insertParams).append(")\n");
     sb.append(returningClause);
     sb.append("    \"\"\";\n");
-    sb.append("  public static final String qName = \"").append(fqTable).append("\";\n");
-
-    sb.append("}\n");
-
-    return sb.toString();
   }
 
+  private void appendQuerySqlDef(String fqTable, List<Field> fields, StringBuilder sb)
+  {
+    String selectFieldNames = fields.stream().map(Field::name).collect(joining(","));
+
+    sb.append("  public static final String querySql =\n");
+    sb.append("    \"\"\"\n");
+    sb.append("    select ").append(selectFieldNames).append("\n");
+    sb.append("    from ").append(fqTable).append("\n");
+    sb.append("    \"\"\";\n");
+  }
 
   private String schemaClassName(String schema)
   {
@@ -279,15 +314,17 @@ public class TableTypesGenerator
       };
   }
 
-  private String tableRecordName(String tableName)
+  private String tableRecordName(String tableName, RecordUse recordUse)
   {
-    return switch (tableNameStyle)
+    String baseName = switch (tableNameStyle)
     {
       case DB_INITCAPS -> capitalizeParts(tableName);
       case DB_INITCAP -> capitalize(tableName);
       case CAMELCASE -> upperCamelCase(tableName);
       case DB -> tableName;
     };
+
+    return baseName + (recordUse == RecordUse.FOR_INSERT ? insertRecordNameSuffix : "");
   }
 
   private String userDefinedTypeName(@Nullable String schema, String name)
@@ -334,12 +371,22 @@ public class TableTypesGenerator
     return f.typeUserDefined() ? bareParam+"::"+f.typeSchema()+"."+f.type() : bareParam;
   }
 
-  private boolean includeFieldInType(Field f, String fqField)
+  private Stream<Field> getIncludedFieldsForRecordUse(RelMetadata relMd, RecordUse recordUse)
+  {
+    @Nullable String schema = relMd.relationId().schema();
+    String tableName = relMd.relationId().name();
+    String fqTable = schema != null ? schema + "." + tableName : tableName;
+    return relMd.fields().stream().filter(f -> includeFieldInType(f, fqTable + "." + f.name(), recordUse));
+  }
+
+  private boolean includeFieldInType(Field f, String fqField, RecordUse recordUse)
   {
     FieldCustomization fcust = fieldCustomizations.get(fqField);
 
-    return fcust != null && fcust.includeInType != null ? fcust.includeInType
-      : !"ALWAYS".equals(f.identityGeneration());
+    return
+      fcust != null && fcust.includeInType != null
+        ? fcust.includeInType
+        : recordUse == RecordUse.FOR_QUERY || !"ALWAYS".equals(f.identityGeneration());
   }
 
   private boolean includeFieldInInsertSql(Field f, String fqField)
@@ -471,6 +518,7 @@ public class TableTypesGenerator
   enum TableNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
   enum UserDefinedTypeNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
   enum SchemaNameStyle { DB, DB_INITCAP, DB_INITCAPS, CAMELCASE }
+  enum RecordUse { FOR_INSERT, FOR_QUERY, FOR_ANY }
 
   record FieldCustomization
   (
